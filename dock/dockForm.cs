@@ -318,6 +318,14 @@ namespace dock
             }
         }
 
+        private void cntxtIcon_unpin(object sender, EventArgs e)
+        {
+            if (pinnedWindows.ContainsKey(lastHWnd))
+            {
+                pinnedWindows.Remove(lastHWnd);
+            }
+        }
+
         private void cntxtIcon_Opening(object sender, System.ComponentModel.CancelEventArgs e)
         {
             PictureBox tmp = (PictureBox)this.Controls.Find(lastHWnd.ToString(), true)[0];
@@ -325,6 +333,7 @@ namespace dock
             {
                 this.cntxtIconClose.Visible = false;
                 this.cntxtIconPin.Visible = false;
+                this.cntxtIconUnpin.Visible = true;
             }
             else
             {
@@ -333,7 +342,8 @@ namespace dock
                 {
                     this.cntxtIconPin.Visible = true;
                 }
-                
+                this.cntxtIconUnpin.Visible = false;
+
             }
         }
 

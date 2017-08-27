@@ -33,6 +33,7 @@
             this.iconFocus = new System.Windows.Forms.PictureBox();
             this.cntxtIcon = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.cntxtIconPin = new System.Windows.Forms.ToolStripMenuItem();
+            this.cntxtIconUnpin = new System.Windows.Forms.ToolStripMenuItem();
             this.cntxtIconClose = new System.Windows.Forms.ToolStripMenuItem();
             ((System.ComponentModel.ISupportInitialize)(this.iconFocus)).BeginInit();
             this.cntxtIcon.SuspendLayout();
@@ -62,22 +63,30 @@
             // 
             this.cntxtIcon.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.cntxtIconPin,
+            this.cntxtIconUnpin,
             this.cntxtIconClose});
             this.cntxtIcon.Name = "cntxtIcon";
-            this.cntxtIcon.Size = new System.Drawing.Size(104, 48);
+            this.cntxtIcon.Size = new System.Drawing.Size(107, 70);
             this.cntxtIcon.Opening += new System.ComponentModel.CancelEventHandler(this.cntxtIcon_Opening);
             // 
             // cntxtIconPin
             // 
             this.cntxtIconPin.Name = "cntxtIconPin";
-            this.cntxtIconPin.Size = new System.Drawing.Size(103, 22);
+            this.cntxtIconPin.Size = new System.Drawing.Size(106, 22);
             this.cntxtIconPin.Text = "Pin";
             this.cntxtIconPin.Click += new System.EventHandler(this.cntxtIcon_pin);
+            // 
+            // cntxtIconUnpin
+            // 
+            this.cntxtIconUnpin.Name = "cntxtIconUnpin";
+            this.cntxtIconUnpin.Size = new System.Drawing.Size(106, 22);
+            this.cntxtIconUnpin.Text = "Unpin";
+            this.cntxtIconUnpin.Click += new System.EventHandler(this.cntxtIcon_unpin);
             // 
             // cntxtIconClose
             // 
             this.cntxtIconClose.Name = "cntxtIconClose";
-            this.cntxtIconClose.Size = new System.Drawing.Size(103, 22);
+            this.cntxtIconClose.Size = new System.Drawing.Size(106, 22);
             this.cntxtIconClose.Text = "Close";
             this.cntxtIconClose.Click += new System.EventHandler(this.cntxtIcon_close);
             // 
@@ -106,6 +115,7 @@
         private System.Windows.Forms.ContextMenuStrip cntxtIcon;
         private System.Windows.Forms.ToolStripMenuItem cntxtIconPin;
         private System.Windows.Forms.ToolStripMenuItem cntxtIconClose;
+        private System.Windows.Forms.ToolStripMenuItem cntxtIconUnpin;
     }
 }
 
