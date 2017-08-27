@@ -32,8 +32,8 @@
             this.taskbarPanel = new System.Windows.Forms.FlowLayoutPanel();
             this.iconFocus = new System.Windows.Forms.PictureBox();
             this.cntxtIcon = new System.Windows.Forms.ContextMenuStrip(this.components);
-            this.pinToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.closeToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.cntxtIconPin = new System.Windows.Forms.ToolStripMenuItem();
+            this.cntxtIconClose = new System.Windows.Forms.ToolStripMenuItem();
             ((System.ComponentModel.ISupportInitialize)(this.iconFocus)).BeginInit();
             this.cntxtIcon.SuspendLayout();
             this.SuspendLayout();
@@ -61,22 +61,25 @@
             // cntxtIcon
             // 
             this.cntxtIcon.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.pinToolStripMenuItem,
-            this.closeToolStripMenuItem});
+            this.cntxtIconPin,
+            this.cntxtIconClose});
             this.cntxtIcon.Name = "cntxtIcon";
-            this.cntxtIcon.Size = new System.Drawing.Size(153, 70);
+            this.cntxtIcon.Size = new System.Drawing.Size(104, 48);
+            this.cntxtIcon.Opening += new System.ComponentModel.CancelEventHandler(this.cntxtIcon_Opening);
             // 
-            // pinToolStripMenuItem
+            // cntxtIconPin
             // 
-            this.pinToolStripMenuItem.Name = "pinToolStripMenuItem";
-            this.pinToolStripMenuItem.Size = new System.Drawing.Size(152, 22);
-            this.pinToolStripMenuItem.Text = "Pin";
+            this.cntxtIconPin.Name = "cntxtIconPin";
+            this.cntxtIconPin.Size = new System.Drawing.Size(103, 22);
+            this.cntxtIconPin.Text = "Pin";
+            this.cntxtIconPin.Click += new System.EventHandler(this.cntxtIcon_pin);
             // 
-            // closeToolStripMenuItem
+            // cntxtIconClose
             // 
-            this.closeToolStripMenuItem.Name = "closeToolStripMenuItem";
-            this.closeToolStripMenuItem.Size = new System.Drawing.Size(152, 22);
-            this.closeToolStripMenuItem.Text = "Close";
+            this.cntxtIconClose.Name = "cntxtIconClose";
+            this.cntxtIconClose.Size = new System.Drawing.Size(103, 22);
+            this.cntxtIconClose.Text = "Close";
+            this.cntxtIconClose.Click += new System.EventHandler(this.cntxtIcon_close);
             // 
             // dockForm
             // 
@@ -101,8 +104,8 @@
         private System.Windows.Forms.FlowLayoutPanel taskbarPanel;
         private System.Windows.Forms.PictureBox iconFocus;
         private System.Windows.Forms.ContextMenuStrip cntxtIcon;
-        private System.Windows.Forms.ToolStripMenuItem pinToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem closeToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem cntxtIconPin;
+        private System.Windows.Forms.ToolStripMenuItem cntxtIconClose;
     }
 }
 

@@ -27,7 +27,8 @@ namespace dock
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool IsIconic(IntPtr hWnd);
-       
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        static extern IntPtr SendMessage(IntPtr hWnd, UInt32 Msg, IntPtr wParam, IntPtr lParam);
 
         // WinAPI UI control constants
         private const int HIDE = 0;
@@ -35,14 +36,17 @@ namespace dock
         private const int MAX = 3;
         private const int RESTORE = 4;
         private const int MIN = 6;
+        private const UInt32 WM_CLOSE = 0x0010;
 
         // Track open windows
         public static Dictionary<IntPtr, PictureBox> openWindows = new Dictionary<IntPtr, PictureBox>();
+        public static Dictionary<IntPtr, PictureBox> pinnedWindows = new Dictionary<IntPtr, PictureBox>();
 
         // Timer for UIUpdates
         private static System.Windows.Forms.Timer tickHandler;
         private static double baseWidth, baseHeight;
         private static IntPtr lastHWnd;
+        private static PictureBox lastIcon;
 
         // Application Data
         public static NameValueCollection AppSettings { get; set; }
@@ -149,6 +153,7 @@ namespace dock
                                 tmp.Image = Bitmap.FromHicon(Icon.ExtractAssociatedIcon(process.MainModule.FileName).Handle);
                                 new ToolTip().SetToolTip(tmp, process.MainWindowTitle);
                                 tmp.Name = process.MainWindowHandle.ToString();
+                                tmp.AccessibleName = process.MainModule.FileName.ToString();
                                 tmp.SizeMode = PictureBoxSizeMode.CenterImage;
                                 tmp.Height = this.Height;
                                 tmp.Width = this.Height;
@@ -157,6 +162,7 @@ namespace dock
                                 {
                                     MouseEventArgs me = (MouseEventArgs)e;
                                     lastHWnd = process.MainWindowHandle;
+                                    lastIcon = tmp;
 
                                     if (me.Button == MouseButtons.Left)
                                     {                                        
@@ -223,8 +229,43 @@ namespace dock
                     }
                     else
                     {
-                        // Remove Icon from dock
-                        taskbarPanel.Controls.Remove(entry.Value);
+                        if (!pinnedWindows.ContainsValue(entry.Value) || entry.Value.BackgroundImage != null )
+                        {
+                            // Remove Icon from dock
+                            taskbarPanel.Controls.Remove(entry.Value);
+                        }                       
+                    }
+                }
+            }
+
+            // Lock window list
+            lock (pinnedWindows)
+            {
+                // Check if each window is still valid
+                foreach (KeyValuePair<IntPtr, PictureBox> entry in pinnedWindows)
+                {
+                    // If window is still valid and isnt already on the dock
+                    if (!this.taskbarPanel.Controls.ContainsKey(entry.Key.ToString()))
+                    {
+                        // Adjust padding where possible
+                        entry.Value.Margin = new Padding(padding, 0, padding, 0);
+                        entry.Value.BackgroundImage = null;
+                        entry.Value.Click += (ssender, ee) =>
+                        {
+                            MouseEventArgs me = (MouseEventArgs)ee;
+
+                            if (me.Button == MouseButtons.Left)
+                            {
+                                Process.Start(entry.Value.AccessibleName);
+                            }
+                            else if (me.Button == MouseButtons.Right)
+                            {
+                                cntxtIcon.Show(Cursor.Position);
+                            }
+                        };
+
+                        // Add Icon to dock
+                        taskbarPanel.Controls.Add(entry.Value);
                     }
                 }
             }
@@ -261,6 +302,39 @@ namespace dock
         {
             // Re-open windows taskbar
             toggleTaskbar(SHOW);
+        }
+
+        private void cntxtIcon_close(object sender, EventArgs e)
+        {
+            SendMessage(lastHWnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+        }
+
+        private void cntxtIcon_pin(object sender, EventArgs e)
+        {          
+            if (!pinnedWindows.ContainsKey(lastHWnd))
+            {
+                PictureBox tmp = (PictureBox)this.Controls.Find(lastHWnd.ToString(), true)[0];
+                pinnedWindows.Add(lastHWnd, tmp);
+            }
+        }
+
+        private void cntxtIcon_Opening(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            PictureBox tmp = (PictureBox)this.Controls.Find(lastHWnd.ToString(), true)[0];
+            if (tmp.BackgroundImage==null)
+            {
+                this.cntxtIconClose.Visible = false;
+                this.cntxtIconPin.Visible = false;
+            }
+            else
+            {
+                this.cntxtIconClose.Visible = true;
+                if (!pinnedWindows.ContainsKey(lastHWnd))
+                {
+                    this.cntxtIconPin.Visible = true;
+                }
+                
+            }
         }
 
         private void toggleTaskbar(int action)
