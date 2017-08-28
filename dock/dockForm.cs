@@ -39,8 +39,9 @@ namespace dock
         private const UInt32 WM_CLOSE = 0x0010;
 
         // Track open windows
-        public static Dictionary<IntPtr, PictureBox> openWindows = new Dictionary<IntPtr, PictureBox>();
-        public static Dictionary<IntPtr, PictureBox> pinnedWindows = new Dictionary<IntPtr, PictureBox>();
+        public static Dictionary<string, Dictionary<IntPtr, PictureBox>> openWindows = new Dictionary<string, Dictionary<IntPtr, PictureBox>>();
+        public static Dictionary<string, PictureBox> pinnedWindows = new Dictionary<string, PictureBox>();
+        public static List<string> activePins = new List<string>();
         public static List<string> hoverIcons = new List<string>();
 
         // Timer for UIUpdates
@@ -145,6 +146,7 @@ namespace dock
 
       public void getOpenWindows()
       {
+            bool iconsFromAllDisplays = Convert.ToBoolean(AppSettings["iconsFromAllDisplays"]);
             // Get running windows
             new Thread(() =>
             {
@@ -155,56 +157,70 @@ namespace dock
                     Process[] processlist = Process.GetProcesses();
                     foreach (Process process in processlist)
                     {
-                        if (!String.IsNullOrEmpty(process.MainWindowTitle))
+                        // Check if process has valid window
+                        if (!String.IsNullOrEmpty(process.MainWindowTitle) && IsWindow(process.MainWindowHandle))
                         {
-                            if (!openWindows.ContainsKey(process.MainWindowHandle))
+                            // Check which screen/display it is on, show/hide depending on settings
+                            if (iconsFromAllDisplays || (Screen.FromHandle(process.MainWindowHandle).DeviceName == Screen.PrimaryScreen.DeviceName && !iconsFromAllDisplays))
                             {
-                                // Build Control
-                                PictureBox tmp = new PictureBox();
-                                tmp.Image = Bitmap.FromHicon(Icon.ExtractAssociatedIcon(process.MainModule.FileName).Handle);
-                                new ToolTip().SetToolTip(tmp, process.MainWindowTitle);
-                                tmp.Name = process.MainWindowHandle.ToString();
-                                tmp.AccessibleName = process.MainModule.FileName.ToString();
-                                tmp.SizeMode = PictureBoxSizeMode.CenterImage;
-                                tmp.Height = this.Height;
-                                tmp.Width = this.Height;
-                                tmp.BackgroundImageLayout = ImageLayout.Stretch;
-                                tmp.MouseEnter+= (sender, e) =>
-                                {
-                                  hoverIcons.Add(tmp.Name);
-                                };
-                                tmp.MouseLeave += (sender, e) =>
-                                {
-                                  hoverIcons.Remove(tmp.Name);
-                                };
-                                tmp.Click += (sender, e) =>
-                                {
-                                    MouseEventArgs me = (MouseEventArgs)e;
-                                    lastHWnd = process.MainWindowHandle;
-                                    lastIcon = tmp;
-
-                                    if (me.Button == MouseButtons.Left)
-                                    {                                        
-                                        if (IsIconic(lastHWnd))
-                                        {
-                                            SetForegroundWindow(lastHWnd);
-                                            ToggleWindow((int)lastHWnd, RESTORE);
-                                        }
-                                        else
-                                        {
-                                            ToggleWindow((int)lastHWnd, MIN);
-                                        }
-                                    }
-                                    else if(me.Button == MouseButtons.Right)
-                                    {
-                                        cntxtIcon.Show(Cursor.Position);
-                                    }
-                                };
-
                                 lock (openWindows)
                                 {
-                                    // Add to tracked windows
-                                    openWindows.Add(process.MainWindowHandle, tmp);
+                                    if (!openWindows.ContainsKey(process.MainModule.FileName))
+                                    {
+                                        openWindows.Add(process.MainModule.FileName, new Dictionary<IntPtr, PictureBox>());
+                                    }
+                                }
+
+                                // Add this window if it is not already being tracked
+                                if (!openWindows[process.MainModule.FileName].ContainsKey(process.MainWindowHandle))
+                                {
+                                    // Build Icon as PictureBox Control
+                                    PictureBox tmp = new PictureBox();
+                                    tmp.Image = Bitmap.FromHicon(Icon.ExtractAssociatedIcon(process.MainModule.FileName).Handle);
+                                    new ToolTip().SetToolTip(tmp, process.MainWindowTitle);
+                                    tmp.Name = process.MainWindowHandle.ToString();
+                                    tmp.AccessibleName = process.MainModule.FileName.ToString();
+                                    tmp.SizeMode = PictureBoxSizeMode.CenterImage;
+                                    tmp.Height = this.Height;
+                                    tmp.Width = this.Height;
+                                    tmp.BackgroundImageLayout = ImageLayout.Stretch;
+                                    tmp.MouseEnter += (sender, e) =>
+                                    {
+                                      hoverIcons.Add(tmp.Name);
+                                    };
+                                    tmp.MouseLeave += (sender, e) =>
+                                    {
+                                      hoverIcons.Remove(tmp.Name);
+                                    };
+                                    tmp.Click += (sender, e) =>
+                                    {
+                                        MouseEventArgs me = (MouseEventArgs)e;
+                                        lastHWnd = process.MainWindowHandle;
+                                        lastIcon = tmp;
+
+                                        if (me.Button == MouseButtons.Left)
+                                        {                                        
+                                            if (IsIconic(lastHWnd))
+                                            {
+                                                SetForegroundWindow(lastHWnd);
+                                                ToggleWindow((int)lastHWnd, RESTORE);
+                                            }
+                                            else
+                                            {
+                                                ToggleWindow((int)lastHWnd, MIN);
+                                            }
+                                        }
+                                        else if(me.Button == MouseButtons.Right)
+                                        {
+                                            cntxtIcon.Show(Cursor.Position);
+                                        }
+                                    };
+
+                                    lock (openWindows)
+                                    {
+                                        // Add to tracked windows
+                                        openWindows[process.MainModule.FileName].Add(process.MainWindowHandle, tmp);
+                                    }
                                 }
                             }
                         }
@@ -219,77 +235,71 @@ namespace dock
             taskbarPanel.SuspendLayout();
 
             // Get Spacing Config
-            int padding = Convert.ToInt32(AppSettings["IconSpacing"]);
+            int padding = Convert.ToInt32(AppSettings["iconSpacing"]);
 
             // Lock window list
             lock (openWindows)
             {
                 // Check if each window is still valid
-                foreach (KeyValuePair<IntPtr, PictureBox> entry in openWindows)
-                {
-                    // If window is still valid and isnt already on the dock
-                    if (IsWindow(entry.Key) && !this.Controls.ContainsKey(entry.Key.ToString()))
-                    {            
-                        // Adjust padding where possible
-                        entry.Value.Margin = new Padding(padding, 0, padding, 0);
-
-                        // Check if active
-                        if (entry.Value.Name == GetForegroundWindow().ToString())
+                foreach (KeyValuePair<string, Dictionary<IntPtr, PictureBox>> windowGroup in openWindows)
+                {   
+                    if (windowGroup.Value.Count > 0)
+                    { 
+                        foreach (KeyValuePair<IntPtr, PictureBox> entry in windowGroup.Value)
                         {
-                            entry.Value.BackgroundImage = new Bitmap(".\\Resources\\iconhighlight.png");
-                        }
-                        else
-                        {
-                            entry.Value.BackgroundImage = new Bitmap(".\\Resources\\iconbg.png");
-                        }
-
-                        // Add Icon to dock
-                        taskbarPanel.Controls.Add(entry.Value);
-                    }
-                    else
-                    {
-                        if (!pinnedWindows.ContainsValue(entry.Value) || entry.Value.BackgroundImage != null )
-                        {
-                            // Remove Icon from dock
-                            taskbarPanel.Controls.Remove(entry.Value);
-                        }                       
-                    }
+                            // Null bg
+                            entry.Value.BackgroundImage = null;
                     
-                    // is window highlighted
-                    if (hoverIcons.Contains(entry.Value.Name)){
-                        entry.Value.BackgroundImage = new Bitmap(".\\Resources\\iconhighlight.png");
-                    }
-                }
-            }
+                            // If window is still valid and isnt already on the dock
+                            if (IsWindow(entry.Key) && ! this.Controls.ContainsKey(entry.Key.ToString()))
+                            {            
+                                // Adjust padding where possible
+                                entry.Value.Margin = new Padding(padding, 0, padding, 0);
 
-            // Lock window list
-            lock (pinnedWindows)
-            {
-                // Check if each window is still valid
-                foreach (KeyValuePair<IntPtr, PictureBox> entry in pinnedWindows)
-                {
-                    // If window is still valid and isnt already on the dock
-                    if (!this.taskbarPanel.Controls.ContainsKey(entry.Key.ToString()))
-                    {
-                        // Adjust padding where possible
-                        entry.Value.Margin = new Padding(padding, 0, padding, 0);
-                        entry.Value.BackgroundImage = null;
-                        entry.Value.Click += (ssender, ee) =>
-                        {
-                            MouseEventArgs me = (MouseEventArgs)ee;
+                                // Check if active
+                                if (entry.Value.Name == GetForegroundWindow().ToString())
+                                {
+                                    entry.Value.BackgroundImage = new Bitmap(".\\Resources\\iconhighlight.png");
+                                }
+                                else
+                                {
+                                    entry.Value.BackgroundImage = new Bitmap(".\\Resources\\iconbg.png");
+                                } 
 
-                            if (me.Button == MouseButtons.Left)
-                            {
-                                Process.Start(entry.Value.AccessibleName);
+                                // Add Icon to dock
+                                taskbarPanel.Controls.Add(entry.Value);
+                                
+                                if (activePins.Contains(windowGroup.Key))
+                                {
+                                    activePins.Remove(windowGroup.Key);
+                                    var sdf = taskbarPanel.Controls.GetChildIndex(taskbarPanel.Controls.Find(windowGroup.Key, true)[0]);
+                                    var asd = taskbarPanel.Controls.Find(entry.Key.ToString(), true)[0];
+                                    taskbarPanel.Controls.SetChildIndex(asd, sdf);
+                                    taskbarPanel.Controls.RemoveByKey(windowGroup.Key);                      
+                                }
+                                
                             }
-                            else if (me.Button == MouseButtons.Right)
+                            // Not a window (anymore) so remove it from the list and form
+                            else if (!IsWindow(entry.Key))
                             {
-                                cntxtIcon.Show(Cursor.Position);
-                            }
-                        };
+                                taskbarPanel.Controls.Remove(entry.Value);
+                                openWindows[windowGroup.Key].Remove(entry.Key);
 
-                        // Add Icon to dock
-                        taskbarPanel.Controls.Add(entry.Value);
+                                // if notepad is pinned, but it is not active
+                                if (pinnedWindows.ContainsKey(windowGroup.Key) && !activePins.Contains(windowGroup.Key))
+                                {
+                                    // Set it as active and add the pin to taskbar
+                                    activePins.Add(windowGroup.Key);
+                                    taskbarPanel.Controls.Add(pinnedWindows[windowGroup.Key]);
+                                }
+                                break;
+                            }
+
+                            // is window highlighted
+                            if (hoverIcons.Contains(entry.Value.Name)){
+                                entry.Value.BackgroundImage = new Bitmap(".\\Resources\\iconhighlight.png");
+                            }
+                        }
                     }
                 }
             }
@@ -330,45 +340,69 @@ namespace dock
 
         private void cntxtIcon_close(object sender, EventArgs e)
         {
+            // Send Close comand to window via windows API
             SendMessage(lastHWnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
         }
 
         private void cntxtIcon_pin(object sender, EventArgs e)
         {          
-            if (!pinnedWindows.ContainsKey(lastHWnd))
-            {
-                PictureBox tmp = (PictureBox)this.Controls.Find(lastHWnd.ToString(), true)[0];
-                pinnedWindows.Add(lastHWnd, tmp);
+            // check if already pinned
+            if (!pinnedWindows.ContainsKey(lastIcon.AccessibleName))
+            {              
+                PictureBox entry = lastIcon;
+                entry.Name = lastIcon.AccessibleName;
+                entry.Click += (ssender, ee) =>
+                {
+                    MouseEventArgs me = (MouseEventArgs)ee;
+
+                    if (me.Button == MouseButtons.Left)
+                    {
+                      Process.Start(entry.Name);
+                              
+                    }
+                    else if (me.Button == MouseButtons.Right)
+                    {
+                        cntxtIcon.Show(Cursor.Position);
+                    }
+                };
+                // Find the PictureBox control and store it as a pin
+                pinnedWindows.Add(lastIcon.AccessibleName, lastIcon);
             }
         }
 
         private void cntxtIcon_unpin(object sender, EventArgs e)
         {
-            if (pinnedWindows.ContainsKey(lastHWnd))
+            // Check if icon is pinned
+            if (pinnedWindows.ContainsKey(lastIcon.AccessibleName))
             {
-                pinnedWindows.Remove(lastHWnd);
+                // Remove pin
+                pinnedWindows.Remove(lastIcon.AccessibleName);
             }
         }
 
         private void cntxtIcon_Opening(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            PictureBox tmp = (PictureBox)this.Controls.Find(lastHWnd.ToString(), true)[0];
-            if (tmp.BackgroundImage==null)
+            // Find the icon that was right-clicked
+            PictureBox tmp = lastIcon;
+      
+            /*
+            if (!IsWindow((IntPtr)Convert.ToInt32(tmp.Name)))
             {
+                // Hide unrelated context menu items
                 this.cntxtIconClose.Visible = false;
                 this.cntxtIconPin.Visible = false;
                 this.cntxtIconUnpin.Visible = true;
             }
             else
             {
+                // Hide unrelated context menu items
                 this.cntxtIconClose.Visible = true;
-                if (!pinnedWindows.ContainsKey(lastHWnd))
+                if (!pinnedWindows.ContainsKey(lastIcon.AccessibleName))
                 {
                     this.cntxtIconPin.Visible = true;
                 }
                 this.cntxtIconUnpin.Visible = false;
-
-            }
+            }*/
         }
 
     private void cntxtDock_exit(object sender, EventArgs e)
@@ -382,12 +416,12 @@ namespace dock
     }
 
     private void toggleTaskbar(int action)
-        {
-            // Find Taskbar window handle
-            int hwnd = FindWindow("Shell_TrayWnd", "");
-            // Hide Window
-            ToggleWindow(hwnd, action);
-        }
+    {
+        // Find Taskbar window handle
+        int hwnd = FindWindow("Shell_TrayWnd", "");
+        // Hide Window
+        ToggleWindow(hwnd, action);
+    }
 
     }
 }
