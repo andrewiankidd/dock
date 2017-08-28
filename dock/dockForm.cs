@@ -41,6 +41,7 @@ namespace dock
         // Track open windows
         public static Dictionary<IntPtr, PictureBox> openWindows = new Dictionary<IntPtr, PictureBox>();
         public static Dictionary<IntPtr, PictureBox> pinnedWindows = new Dictionary<IntPtr, PictureBox>();
+        public static List<string> hoverIcons = new List<string>();
 
         // Timer for UIUpdates
         private static System.Windows.Forms.Timer tickHandler;
@@ -132,8 +133,18 @@ namespace dock
             tickHandler.Start();
         }
 
-        public void getOpenWindows()
-        {
+      private void dockForm_Click(object sender, EventArgs e)
+      {
+            MouseEventArgs me = (MouseEventArgs)e;
+
+            if (me.Button == MouseButtons.Right)
+            {
+              cntxtDock.Show(Cursor.Position);
+            }
+      }
+
+      public void getOpenWindows()
+      {
             // Get running windows
             new Thread(() =>
             {
@@ -158,6 +169,14 @@ namespace dock
                                 tmp.Height = this.Height;
                                 tmp.Width = this.Height;
                                 tmp.BackgroundImageLayout = ImageLayout.Stretch;
+                                tmp.MouseEnter+= (sender, e) =>
+                                {
+                                  hoverIcons.Add(tmp.Name);
+                                };
+                                tmp.MouseLeave += (sender, e) =>
+                                {
+                                  hoverIcons.Remove(tmp.Name);
+                                };
                                 tmp.Click += (sender, e) =>
                                 {
                                     MouseEventArgs me = (MouseEventArgs)e;
@@ -234,6 +253,11 @@ namespace dock
                             // Remove Icon from dock
                             taskbarPanel.Controls.Remove(entry.Value);
                         }                       
+                    }
+                    
+                    // is window highlighted
+                    if (hoverIcons.Contains(entry.Value.Name)){
+                        entry.Value.BackgroundImage = new Bitmap(".\\Resources\\iconhighlight.png");
                     }
                 }
             }
@@ -347,7 +371,17 @@ namespace dock
             }
         }
 
-        private void toggleTaskbar(int action)
+    private void cntxtDock_exit(object sender, EventArgs e)
+    {
+      this.Close();
+    }
+
+    private void cntxtDock_taskManager(object sender, EventArgs e)
+    {
+      Process.Start("taskmgr");
+    }
+
+    private void toggleTaskbar(int action)
         {
             // Find Taskbar window handle
             int hwnd = FindWindow("Shell_TrayWnd", "");
