@@ -76,8 +76,8 @@ namespace dock
 
 
         // Track open windows
-        public static Dictionary<string, Dictionary<IntPtr, PictureBox>> openWindows = new Dictionary<string, Dictionary<IntPtr, PictureBox>>();
-        public static Dictionary<string, PictureBox> pinnedWindows = new Dictionary<string, PictureBox>();
+        public static Dictionary<string, Dictionary<IntPtr, GroupBox>> openWindows = new Dictionary<string, Dictionary<IntPtr, GroupBox>>();
+        public static Dictionary<string, GroupBox> pinnedWindows = new Dictionary<string, GroupBox>();
         public static List<string> filteredWindows = new List<string>();
         public static List<string> activePins = new List<string>();
         public static List<string> hoverIcons = new List<string>();
@@ -86,7 +86,7 @@ namespace dock
         private static System.Windows.Forms.Timer tickHandler;
         private static double baseWidth, baseHeight;
         private static IntPtr lastHWnd;
-        private static PictureBox lastIcon;
+        private static GroupBox lastIcon;
 
         // Application Data
         public static NameValueCollection AppSettings { get; set; }
@@ -208,7 +208,7 @@ namespace dock
                                 {
                                     lock (openWindows)
                                     {
-                                        openWindows.Add(process.MainModule.FileName, new Dictionary<IntPtr, PictureBox>());
+                                        openWindows.Add(process.MainModule.FileName, new Dictionary<IntPtr, GroupBox>());
                                     }
                                 }
                                
@@ -216,36 +216,33 @@ namespace dock
                                 // Add this window if it is not already being tracked
                                 if (!openWindows[process.MainModule.FileName].ContainsKey(process.MainWindowHandle))
                                 {
-                                    // Build Icon as PictureBox Control
-                                    PictureBox tmp = new PictureBox();
-                                    tmp.Image = Bitmap.FromHicon(Icon.ExtractAssociatedIcon(process.MainModule.FileName).Handle);
-                                    new ToolTip().SetToolTip(tmp, process.MainWindowTitle);
-                                    tmp.Name = process.MainWindowHandle.ToString();
-                                    tmp.AccessibleName = process.MainModule.FileName.ToString();
-                                    tmp.SizeMode = PictureBoxSizeMode.CenterImage;
-                                    tmp.Height = this.Height;
-                                    tmp.Width = this.Height;
-                                    tmp.BackgroundImageLayout = ImageLayout.Stretch;
-                                    tmp.MouseDown += (sender, e) =>
+                                    // prepare group
+                                    GroupBox grp = new GroupBox();
+                                    grp.Name = process.MainWindowHandle.ToString();
+                                    grp.AccessibleName = process.MainModule.FileName.ToString();
+                                    grp.Tag = process.MainWindowTitle;
+                                    grp.Height = this.Height;
+                                    grp.Width = this.Height;
+                                    grp.MouseDown += (sender, e) =>
                                     {
-                                      
+
                                     };
-                                    tmp.MouseEnter += (sender, e) =>
+                                    grp.MouseEnter += (sender, e) =>
                                     {
-                                      hoverIcons.Add(tmp.Name);
+                                        hoverIcons.Add(grp.Name);
                                     };
-                                    tmp.MouseLeave += (sender, e) =>
+                                    grp.MouseLeave += (sender, e) =>
                                     {
-                                      hoverIcons.Remove(tmp.Name);
+                                        hoverIcons.Remove(grp.Name);
                                     };
-                                    tmp.Click += (sender, e) =>
+                                    grp.Click += (sender, e) =>
                                     {
                                         MouseEventArgs me = (MouseEventArgs)e;
                                         lastHWnd = process.MainWindowHandle;
-                                        lastIcon = tmp;
+                                        lastIcon = grp;
 
                                         if (me.Button == MouseButtons.Left)
-                                        {                                        
+                                        {
                                             if (IsIconic(lastHWnd))
                                             {
                                                 SetForegroundWindow(lastHWnd);
@@ -256,16 +253,42 @@ namespace dock
                                                 ToggleWindow((int)lastHWnd, MIN);
                                             }
                                         }
-                                        else if(me.Button == MouseButtons.Right)
+                                        else if (me.Button == MouseButtons.Right)
                                         {
                                             cntxtIcon.Show(Cursor.Position);
                                         }
                                     };
+                                    new ToolTip().SetToolTip(grp, process.MainWindowTitle);
+
+                                    if (Convert.ToBoolean(AppSettings["iconLabels"]))
+                                    {
+                                        // Prepare label
+                                        Label lbl = new Label();
+                                        lbl.BackgroundImageLayout = ImageLayout.Stretch;
+                                        lbl.TextAlign = ContentAlignment.MiddleLeft;
+                                        lbl.Location = new Point(this.Height, 0);
+                                        lbl.Text = process.MainWindowTitle;
+                                        lbl.Name = "icoLabel";
+                                        lbl.Height = this.Height;
+                                        lbl.Enabled = false;
+                                        grp.Width += 100;
+                                        grp.Controls.Add(lbl);
+                                    }
+
+                                    // Build Icon as PictureBox Control
+                                    PictureBox ico = new PictureBox();
+                                    ico.Image = Bitmap.FromHicon(Icon.ExtractAssociatedIcon(process.MainModule.FileName).Handle);
+                                    ico.BackgroundImageLayout = ImageLayout.Stretch;
+                                    ico.SizeMode = PictureBoxSizeMode.CenterImage;
+                                    ico.Height = this.Height;
+                                    ico.Width = this.Height;                                   
+                                    ico.Enabled = false;
+                                    grp.Controls.Add(ico);
 
                                     lock (openWindows)
                                     {
                                         // Add to tracked windows
-                                        openWindows[process.MainModule.FileName].Add(process.MainWindowHandle, tmp);
+                                        openWindows[process.MainModule.FileName].Add(process.MainWindowHandle, grp);
                                     }
                                 }
                             }
@@ -287,40 +310,29 @@ namespace dock
             lock (openWindows)
             {
                 // Check if each window is still valid
-                foreach (KeyValuePair<string, Dictionary<IntPtr, PictureBox>> windowGroup in openWindows)
+                foreach (KeyValuePair<string, Dictionary<IntPtr, GroupBox>> windowGroup in openWindows)
                 {   
                     if (windowGroup.Value.Count > 0)
                     { 
-                        foreach (KeyValuePair<IntPtr, PictureBox> entry in windowGroup.Value)
+                        foreach (KeyValuePair<IntPtr, GroupBox> entry in windowGroup.Value)
                         {
-                            // Null bg
-                            entry.Value.BackgroundImage = null;
-                    
+
                             // If window is still valid and isnt already on the dock
-                            if (IsWindow(entry.Key) && ! this.Controls.ContainsKey(entry.Key.ToString()))
-                            {            
+                            if (IsWindow(entry.Key) && ! taskbarPanel.Controls.ContainsKey(entry.Key.ToString()))
+                            {                              
+
                                 // Adjust padding where possible
                                 entry.Value.Margin = new Padding(padding, 0, padding, 0);
-
-                                // Check if active
-                                if (entry.Value.Name == GetForegroundWindow().ToString())
-                                {
-                                    entry.Value.BackgroundImage = new Bitmap(".\\Resources\\iconhighlight.png");
-                                }
-                                else
-                                {
-                                    entry.Value.BackgroundImage = new Bitmap(".\\Resources\\iconbg.png");
-                                } 
-
-                                 // Add Icon to dock
+                             
+                                // Add Icon to dock
                                 taskbarPanel.Controls.Add(entry.Value);
                                 
+                                //                      
                                 if (activePins.Contains(windowGroup.Key))
                                 {
                                     activePins.Remove(windowGroup.Key);
                                     taskbarPanel.Controls.RemoveByKey(windowGroup.Key);                      
-                                }           
-                                
+                                }                                
                             }
                             // Not a window (anymore) so remove it from the list and form
                             else if (!IsWindow(entry.Key))
@@ -334,13 +346,14 @@ namespace dock
                                     // Set it as active and add the pin to taskbar
                                     activePins.Add(windowGroup.Key);
                                     taskbarPanel.Controls.Add(pinnedWindows[windowGroup.Key]);
+                                    GroupBox pin = pinnedWindows[lastIcon.AccessibleName];
+                                    pin.Width = this.Height;
+                                    if (pin.Controls.Count>1)
+                                    {
+                                        pin.Controls.RemoveByKey("icoLabel");
+                                    }
                                 }
                                 break;
-                            }
-
-                            // is window highlighted
-                            if (hoverIcons.Contains(entry.Value.Name)){
-                                entry.Value.BackgroundImage = new Bitmap(".\\Resources\\iconhighlight.png");
                             }
                         }
                     }
@@ -348,7 +361,39 @@ namespace dock
             }
 
             // Resize dock
-            taskbarPanel.Width = (taskbarPanel.Controls.Count * this.Height) + ((padding*2) * taskbarPanel.Controls.Count);
+            if (taskbarPanel.Controls.Count>1)
+            {
+                taskbarPanel.Width = taskbarPanel.Controls.Count * taskbarPanel.Controls[0].Width + ((padding * 2) * taskbarPanel.Controls.Count);
+                foreach(GroupBox grp in taskbarPanel.Controls)
+                {
+                    // is window highlighted
+                    Bitmap bgImg;
+                    if (hoverIcons.Contains(grp.Name))
+                    {
+                        bgImg = new Bitmap(".\\Resources\\iconhighlight.png");
+                    }
+                    else if (grp.Name == GetForegroundWindow().ToString())
+                    {
+                        bgImg = new Bitmap(".\\Resources\\iconhighlight.png");
+                    }
+                    else if (activePins.Contains(grp.Name))
+                    {
+                        bgImg = null;
+                    }
+                    else
+                    {
+                        bgImg = new Bitmap(".\\Resources\\iconbg.png");
+                    }
+
+                    // Apply bg
+                    foreach (Control child in grp.Controls)
+                    {
+                        child.BackgroundImage = bgImg;
+                    }
+                }
+                // Check if active
+                
+            }
 
             // If config is set to enable centering, calculate center
             if (Convert.ToBoolean(Convert.ToBoolean(AppSettings["dockCentered"])))
@@ -363,7 +408,7 @@ namespace dock
                 this.Location = new Point(diff, Screen.PrimaryScreen.Bounds.Height - this.Height);
 
                 // Center icons to dock
-                center = (this.Width / 2) - ((taskbarPanel.Controls.Count * this.Height) / 2) - (padding * taskbarPanel.Controls.Count);
+                center = (this.Width / 2) - taskbarPanel.Width/2;
                 taskbarPanel.Location = new Point(center, 0);               
             }
 
@@ -397,7 +442,7 @@ namespace dock
             // check if already pinned
             if (!pinnedWindows.ContainsKey(lastIcon.AccessibleName))
             {
-                PictureBox entry = lastIcon;
+                GroupBox entry = lastIcon;
                 entry.Name = lastIcon.AccessibleName;
                 entry.Click += (ssender, ee) =>
                 {
@@ -431,9 +476,9 @@ namespace dock
         private void cntxtIcon_Opening(object sender, System.ComponentModel.CancelEventArgs e)
         {
             // Find the icon that was right-clicked
-            PictureBox tmp = lastIcon;
-      
             /*
+            GroupBox tmp = lastIcon;
+                  
             if (!IsWindow((IntPtr)Convert.ToInt32(tmp.Name)))
             {
                 // Hide unrelated context menu items
