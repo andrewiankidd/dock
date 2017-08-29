@@ -30,18 +30,55 @@ namespace dock
         static extern bool IsIconic(IntPtr hWnd);
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         static extern IntPtr SendMessage(IntPtr hWnd, UInt32 Msg, IntPtr wParam, IntPtr lParam);
+        [DllImport("shell32.dll", CharSet = CharSet.Auto)]
+        static extern bool ShellExecuteEx(ref SHELLEXECUTEINFO lpExecInfo);
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        public struct SHELLEXECUTEINFO
+        {
+            public int cbSize;
+            public uint fMask;
+            public IntPtr hwnd;
+            [MarshalAs(UnmanagedType.LPTStr)]
+            public string lpVerb;
+            [MarshalAs(UnmanagedType.LPTStr)]
+            public string lpFile;
+            [MarshalAs(UnmanagedType.LPTStr)]
+            public string lpParameters;
+            [MarshalAs(UnmanagedType.LPTStr)]
+            public string lpDirectory;
+            public int nShow;
+            public IntPtr hInstApp;
+            public IntPtr lpIDList;
+            [MarshalAs(UnmanagedType.LPTStr)]
+            public string lpClass;
+            public IntPtr hkeyClass;
+            public uint dwHotKey;
+            public IntPtr hIcon;
+            public IntPtr hProcess;
+        }
+        [DllImport("User32.dll")]
+        public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+        [DllImport("User32.dll")]
+        public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
         // WinAPI UI control constants
         private const int HIDE = 0;
         private const int SHOW = 1;
         private const int MAX = 3;
         private const int RESTORE = 4;
+        private const int SW_SHOW = 5;
         private const int MIN = 6;
+        private const uint SEE_MASK_INVOKEIDLIST = 12;
         private const UInt32 WM_CLOSE = 0x0010;
+        private const int WS_EX_APPWINDOW = 0x40000;
+        private const int WS_EX_TOOLWINDOW = 0x0080;
+        private const int GWL_EXSTYLE = -0x14;
+
 
         // Track open windows
         public static Dictionary<string, Dictionary<IntPtr, PictureBox>> openWindows = new Dictionary<string, Dictionary<IntPtr, PictureBox>>();
         public static Dictionary<string, PictureBox> pinnedWindows = new Dictionary<string, PictureBox>();
+        public static List<string> filteredWindows = new List<string>();
         public static List<string> activePins = new List<string>();
         public static List<string> hoverIcons = new List<string>();
 
@@ -57,6 +94,7 @@ namespace dock
         public dockForm()
         {
             AppSettings = ConfigurationManager.AppSettings;
+            filteredWindows.Add("Windows Shell Experience Host");
             InitializeComponent();
         }
 
@@ -160,18 +198,20 @@ namespace dock
                     foreach (Process process in processlist)
                     {
                         // Check if process has valid window
-                        if (!String.IsNullOrEmpty(process.MainWindowTitle) && IsWindow(process.MainWindowHandle))
+                        if ((!String.IsNullOrEmpty(process.MainWindowTitle) && !filteredWindows.Contains(process.MainWindowTitle)) && IsWindow(process.MainWindowHandle) && (GetWindowLong(process.MainWindowHandle, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) == 0)
                         {
                             // Check which screen/display it is on, show/hide depending on settings
                             if (iconsFromAllDisplays || (Screen.FromHandle(process.MainWindowHandle).DeviceName == Screen.PrimaryScreen.DeviceName && !iconsFromAllDisplays))
                             {
-                                lock (openWindows)
+                               
+                                if (!openWindows.ContainsKey(process.MainModule.FileName))
                                 {
-                                    if (!openWindows.ContainsKey(process.MainModule.FileName))
+                                    lock (openWindows)
                                     {
                                         openWindows.Add(process.MainModule.FileName, new Dictionary<IntPtr, PictureBox>());
                                     }
                                 }
+                               
 
                                 // Add this window if it is not already being tracked
                                 if (!openWindows[process.MainModule.FileName].ContainsKey(process.MainWindowHandle))
@@ -347,6 +387,11 @@ namespace dock
             SendMessage(lastHWnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
         }
 
+        private void cntxtIcon_properties(object sender, EventArgs e)
+        {
+            ShowFileProperties(lastIcon.AccessibleName);
+        }
+
         private void cntxtIcon_pin(object sender, EventArgs e)
         {          
             // check if already pinned
@@ -424,6 +469,17 @@ namespace dock
             int hwnd = FindWindow("Shell_TrayWnd", "");
             // Hide Window
             ToggleWindow(hwnd, action);
+        }
+
+        public static bool ShowFileProperties(string Filename)
+        {
+            SHELLEXECUTEINFO info = new SHELLEXECUTEINFO();
+            info.cbSize = System.Runtime.InteropServices.Marshal.SizeOf(info);
+            info.lpVerb = "properties";
+            info.lpFile = Filename;
+            info.nShow = SW_SHOW;
+            info.fMask = SEE_MASK_INVOKEIDLIST;
+            return ShellExecuteEx(ref info);
         }
 
         protected override CreateParams CreateParams
