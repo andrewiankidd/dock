@@ -7,6 +7,7 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
+using System.IO;
 
 namespace dock
 {
@@ -117,6 +118,7 @@ namespace dock
 
             this.TopMost = true;
             this.ShowInTaskbar = false;
+            this.taskbarPanel.AllowDrop = true;
 
             // Hide windows taskbar
             toggleTaskbar(HIDE);
@@ -184,6 +186,10 @@ namespace dock
                                     tmp.Height = this.Height;
                                     tmp.Width = this.Height;
                                     tmp.BackgroundImageLayout = ImageLayout.Stretch;
+                                    tmp.MouseDown += (sender, e) =>
+                                    {
+                                      
+                                    };
                                     tmp.MouseEnter += (sender, e) =>
                                     {
                                       hoverIcons.Add(tmp.Name);
@@ -266,17 +272,14 @@ namespace dock
                                     entry.Value.BackgroundImage = new Bitmap(".\\Resources\\iconbg.png");
                                 } 
 
-                                // Add Icon to dock
+                                 // Add Icon to dock
                                 taskbarPanel.Controls.Add(entry.Value);
                                 
                                 if (activePins.Contains(windowGroup.Key))
                                 {
                                     activePins.Remove(windowGroup.Key);
-                                    var sdf = taskbarPanel.Controls.GetChildIndex(taskbarPanel.Controls.Find(windowGroup.Key, true)[0]);
-                                    var asd = taskbarPanel.Controls.Find(entry.Key.ToString(), true)[0];
-                                    taskbarPanel.Controls.SetChildIndex(asd, sdf);
                                     taskbarPanel.Controls.RemoveByKey(windowGroup.Key);                      
-                                }
+                                }           
                                 
                             }
                             // Not a window (anymore) so remove it from the list and form
@@ -348,7 +351,7 @@ namespace dock
         {          
             // check if already pinned
             if (!pinnedWindows.ContainsKey(lastIcon.AccessibleName))
-            {              
+            {
                 PictureBox entry = lastIcon;
                 entry.Name = lastIcon.AccessibleName;
                 entry.Click += (ssender, ee) =>
@@ -405,23 +408,34 @@ namespace dock
             }*/
         }
 
-    private void cntxtDock_exit(object sender, EventArgs e)
-    {
-      this.Close();
-    }
+        private void cntxtDock_exit(object sender, EventArgs e)
+        {
+            this.Close();
+        }
 
-    private void cntxtDock_taskManager(object sender, EventArgs e)
-    {
-      Process.Start("taskmgr");
-    }
+        private void cntxtDock_taskManager(object sender, EventArgs e)
+        {
+            Process.Start("taskmgr");
+        }
 
-    private void toggleTaskbar(int action)
-    {
-        // Find Taskbar window handle
-        int hwnd = FindWindow("Shell_TrayWnd", "");
-        // Hide Window
-        ToggleWindow(hwnd, action);
-    }
+        private void toggleTaskbar(int action)
+        {
+            // Find Taskbar window handle
+            int hwnd = FindWindow("Shell_TrayWnd", "");
+            // Hide Window
+            ToggleWindow(hwnd, action);
+        }
 
-    }
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                var Params = base.CreateParams;
+                Params.ExStyle |= 0x80;
+                return Params;
+            }
+        }
+
+  }
+    
 }
