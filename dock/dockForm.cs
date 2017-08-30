@@ -72,6 +72,7 @@ namespace dock
         private const UInt32 WM_CLOSE = 0x0010;
         private const int WS_EX_APPWINDOW = 0x40000;
         private const int WS_EX_TOOLWINDOW = 0x0080;
+        private const int WS_EX_NOACTIVATE = 0x08000000;
         private const int GWL_EXSTYLE = -0x14;
 
 
@@ -157,7 +158,6 @@ namespace dock
             this.TopMost = true;
             this.ShowInTaskbar = false;
             this.taskbarPanel.AllowDrop = true;
-
             // Hide windows taskbar
             toggleTaskbar(HIDE);
 
@@ -532,7 +532,10 @@ namespace dock
             get
             {
                 var Params = base.CreateParams;
-                Params.ExStyle |= 0x80;
+                // Don't steal focus from windows
+                Params.ExStyle |= WS_EX_NOACTIVATE;
+                // Don't appear in alt-tab
+                Params.ExStyle |= WS_EX_TOOLWINDOW;
                 return Params;
             }
         }
