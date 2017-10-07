@@ -55,6 +55,7 @@
 			this.taskbarPanel.Size = new System.Drawing.Size(655, 50);
 			this.taskbarPanel.TabIndex = 0;
 			this.taskbarPanel.WrapContents = false;
+			this.taskbarPanel.Click += new System.EventHandler(this.dockForm_Click);
 			// 
 			// iconFocus
 			// 
@@ -137,6 +138,7 @@
 			this.trayPanel.Size = new System.Drawing.Size(655, 50);
 			this.trayPanel.TabIndex = 2;
 			this.trayPanel.WrapContents = false;
+			this.trayPanel.Click += new System.EventHandler(this.dockForm_Click);
 			// 
 			// dockForm
 			// 
