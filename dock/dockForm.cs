@@ -210,7 +210,7 @@ namespace dock
                 int dWidth = this.taskbarPanel.Width;
                 int xloc = (sWidth - dWidth) / 2;
                 int yloc = 0;
-                if (AppSettings["dockPosition"] == "top")
+                if (AppSettings["dockPosition"].Equals("top", StringComparison.InvariantCultureIgnoreCase))
                 {
                     yloc = 0;
                 }
@@ -267,7 +267,8 @@ namespace dock
 
 		public unsafe void getTrayIcons()
     {
-			if (AppSettings["showTrayIcons"].Equals("true", StringComparison.InvariantCultureIgnoreCase))
+			bool showTrayIcons = Convert.ToBoolean(AppSettings["showTrayIcons"]);
+			if (showTrayIcons)
 			{
 				new Thread(() =>
 				{
