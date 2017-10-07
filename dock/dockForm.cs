@@ -13,10 +13,13 @@ namespace dock
 {
     public partial class dockForm : Form
     {
+        #region winAPI
         // WinAPI Callbacks
         [DllImport("user32.dll")]
         private static extern int FindWindow(string className, string windowText);
-        [DllImport("user32.dll", EntryPoint = "ShowWindow")]
+				[DllImport("user32.dll", SetLastError = true)]
+				static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpClassName, string lpWindowName);
+				[DllImport("user32.dll", EntryPoint = "ShowWindow")]
         private static extern int ToggleWindow(int hwnd, int command);
         [DllImport("user32.dll")]
         static extern IntPtr GetForegroundWindow();
@@ -27,12 +30,14 @@ namespace dock
         static extern bool IsWindow(IntPtr hWnd);
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool IsWindowVisible(IntPtr hWnd);
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool IsIconic(IntPtr hWnd);
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         static extern IntPtr SendMessage(IntPtr hWnd, UInt32 Msg, IntPtr wParam, IntPtr lParam);
         [DllImport("shell32.dll", CharSet = CharSet.Auto)]
         static extern bool ShellExecuteEx(ref SHELLEXECUTEINFO lpExecInfo);
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
         public struct SHELLEXECUTEINFO
         {
             public int cbSize;
@@ -60,9 +65,59 @@ namespace dock
         public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
         [DllImport("User32.dll")]
         public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+				[ StructLayout( LayoutKind.Sequential ) ]
+				internal struct TBBUTTON 
+				{
+						public Int32 iBitmap;
+						public Int32 idCommand;
+						public byte fsState;
+						public byte fsStyle;
+						public byte bReserved1;
+						public byte bReserved2;
+						public UInt32 dwData;
+						public IntPtr iString;
+				};
+				[DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+				[return: MarshalAs(UnmanagedType.Bool)]
+				private static extern bool SystemParametersInfo(int uiAction, int uiParam, ref RECT pvParam, int fWinIni);
+				private const Int32 SPIF_SENDWININICHANGE = 2;
+				private const Int32 SPIF_UPDATEINIFILE = 1;
+				private const Int32 SPIF_change = SPIF_UPDATEINIFILE | SPIF_SENDWININICHANGE;
+				private const Int32 SPI_SETWORKAREA = 47;
+				private const Int32 SPI_GETWORKAREA = 48;
+				[StructLayout(LayoutKind.Sequential)]
+				public struct RECT
+				{
+					public Int32 Left;
+					public Int32 Top;
+					public Int32 Right;
+					public Int32 Bottom;
+				}
+				[StructLayout(LayoutKind.Sequential)]
+				public class ToolBarButton
+				{
+					public uint iBitmap;
+					public uint idCommand;
+					public byte fsState;
+					public byte fsStyle;
+					private byte bReserved0;
+					private byte bReserved1;
+					public IntPtr dwData; // points to tray data
+					public uint iString;
+				}
+				[StructLayout(LayoutKind.Sequential)]
+				public class TrayData
+				{
+					public IntPtr hWnd;
+					public uint uID;
+					public uint uCallbackMessage;
+					private uint reserved0;
+					private uint reserved1;
+					public IntPtr hIcon;
+				}
 
-        // WinAPI UI control constants
-        private const int HIDE = 0;
+				// WinAPI UI control constants
+				private const int HIDE = 0;
         private const int SHOW = 1;
         private const int MAX = 3;
         private const int RESTORE = 4;
@@ -74,10 +129,15 @@ namespace dock
         private const int WS_EX_TOOLWINDOW = 0x0080;
         private const int WS_EX_NOACTIVATE = 0x08000000;
         private const int GWL_EXSTYLE = -0x14;
+				private const int WM_USER = 0x0400;
+				private const int TB_BUTTONCOUNT = (WM_USER + 24);
+				private const int TB_GETBUTTON = (WM_USER + 23);
+		#endregion
 
-
-        // Track open windows
-        public static Dictionary<string, Dictionary<IntPtr, GroupBox>> openWindows = new Dictionary<string, Dictionary<IntPtr, GroupBox>>();
+		#region globals
+				// Track open windows
+				public static Dictionary<string, Dictionary<IntPtr, GroupBox>> openWindows = new Dictionary<string, Dictionary<IntPtr, GroupBox>>();
+				public static Dictionary<string, Dictionary<IntPtr, GroupBox>> trayIcons = new Dictionary<string, Dictionary<IntPtr, GroupBox>>();
         public static Dictionary<string, GroupBox> pinnedWindows = new Dictionary<string, GroupBox>();
         public static List<string> filteredWindows = new List<string>();
         public static List<string> activePins = new List<string>();
@@ -91,6 +151,7 @@ namespace dock
 
         // Application Data
         public static NameValueCollection AppSettings { get; set; }
+        #endregion
 
         public dockForm()
         {
@@ -147,8 +208,16 @@ namespace dock
             {
                 int sWidth = Screen.PrimaryScreen.Bounds.Width;
                 int dWidth = this.taskbarPanel.Width;
-                int diff = (sWidth - dWidth) / 2;
-                this.Location = new Point(diff, Screen.PrimaryScreen.Bounds.Height - this.Height);
+                int xloc = (sWidth - dWidth) / 2;
+                int yloc = 0;
+                if (AppSettings["dockPosition"] == "top")
+                {
+                    yloc = 0;
+                }
+                else {
+                    yloc = Screen.PrimaryScreen.Bounds.Height - this.Height;
+                }               
+                this.Location = new Point(xloc, yloc);
             }
             else
             {
@@ -158,11 +227,23 @@ namespace dock
             this.TopMost = true;
             this.ShowInTaskbar = false;
             this.taskbarPanel.AllowDrop = true;
+
             // Hide windows taskbar
             toggleTaskbar(HIDE);
 
+						//
+						RECT rect = new RECT();
+						rect.Top = 50;
+						rect.Left = 0;
+						rect.Bottom = 1920;
+						rect.Right = 1080;
+						//SetWorkspace(rect);
+
             // Start polling windows
             getOpenWindows();
+
+            // Start polling tray
+            getTrayIcons();
 
             //Prepare iconFocus
             iconFocus.Image = new Bitmap(".\\Resources\\iconbg.png");
@@ -184,127 +265,235 @@ namespace dock
             }
       }
 
-      public void getOpenWindows()
+		public unsafe void getTrayIcons()
       {
-            bool iconsFromAllDisplays = Convert.ToBoolean(AppSettings["iconsFromAllDisplays"]);
-            // Get running windows
-            new Thread(() =>
-            {
-                while (this.Visible)
-                {
-                    // Retreive window information
-                    Thread.CurrentThread.IsBackground = true;
-                    Process[] processlist = Process.GetProcesses();
-                    foreach (Process process in processlist)
-                    {
-                        // Check if process has valid window
-                        if ((!String.IsNullOrEmpty(process.MainWindowTitle) && !filteredWindows.Contains(process.MainWindowTitle)) && IsWindow(process.MainWindowHandle) && (GetWindowLong(process.MainWindowHandle, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) == 0)
-                        {
-                            // Check which screen/display it is on, show/hide depending on settings
-                            if (iconsFromAllDisplays || (Screen.FromHandle(process.MainWindowHandle).DeviceName == Screen.PrimaryScreen.DeviceName && !iconsFromAllDisplays))
-                            {
+					IntPtr systemTrayHandle = GetSystemTrayHandle();					
+
+					using (LP_Process process = new LP_Process(systemTrayHandle))
+					{
+						ToolBarButton tbb = new ToolBarButton();
+						IntPtr remoteButtonPtr = process.Allocate(tbb);
+						TrayData td = new TrayData();
+						process.Allocate(td);
+						uint count = (uint)SendMessage(systemTrayHandle, TB_BUTTONCOUNT, IntPtr.Zero, IntPtr.Zero);
+
+						for (uint i = 0; i < count; i++)
+						{
+							uint SOK = (uint)SendMessage(systemTrayHandle, TB_GETBUTTON, new IntPtr(i), remoteButtonPtr);
+							if (SOK != 1) throw new ApplicationException("TB_GETBUTTON failed");
+							process.Read(tbb, remoteButtonPtr);
+							process.Read(td, tbb.dwData);
+							if(td.hWnd==IntPtr.Zero) throw new ApplicationException("Invalid window handle");
+							using(LP_Process proc=new LP_Process(td.hWnd)) {
+								string filename=proc.GetImageFileName();
+								if(filename!=null) {
+									filename=filename.ToLower();
+									if(filename.EndsWith(".exe")) {
+										if (!trayIcons.ContainsKey(filename))
+										{
+											lock (trayIcons)
+											{
+												trayIcons.Add(filename, new Dictionary<IntPtr, GroupBox>());
+											}
+
+											// Add this window if it is not already being tracked
+                      if (!trayIcons[filename].ContainsKey(td.hWnd))
+                      {
+                          // prepare group
+                          GroupBox grp = new GroupBox();
+													grp.Name = filename;
+                          grp.AccessibleName = filename;
+                          grp.Tag = filename;
+                          grp.Height = this.Height/2;
+                          grp.Width = this.Height/2;
+                          grp.MouseDown += (sender, e) =>
+                          {
+
+                          };
+                          grp.MouseEnter += (sender, e) =>
+                          {
+                              
+                          };
+                          grp.MouseLeave += (sender, e) =>
+                          {
+                              
+                          };
+                          grp.Click += (sender, e) =>
+                          {
+                              
+                          };
+                          //new ToolTip().SetToolTip(grp, process.MainWindowTitle);
+
+                          // Build Icon as PictureBox Control
+                          PictureBox ico = new PictureBox();
+										
+                          ico.Image = Bitmap.FromHicon((td.hIcon));
+                          ico.BackgroundImageLayout = ImageLayout.Stretch;
+                          ico.SizeMode = PictureBoxSizeMode.CenterImage;
+                          ico.Height = grp.Height;
+                          ico.Width = grp.Width;                                   
+                          ico.Enabled = false;
+                          grp.Controls.Add(ico);
+
+                          lock (trayIcons)
+                          {
+                              // Add to tracked windows
+                              trayIcons[filename].Add(td.hWnd, grp);
+                          }
+                      }
+
+										}
+									}
+								}
+							}
+						}
+					}
+		}
+
+
+		static IntPtr GetSystemTrayHandle()
+		{
+			IntPtr hWndTray = (IntPtr)FindWindow("Shell_TrayWnd", null);
+			if (hWndTray != IntPtr.Zero)
+			{
+				hWndTray = FindWindowEx(hWndTray, IntPtr.Zero, "TrayNotifyWnd", null);
+				if (hWndTray != IntPtr.Zero)
+				{
+					hWndTray = FindWindowEx(hWndTray, IntPtr.Zero, "SysPager", null);
+					if (hWndTray != IntPtr.Zero)
+					{
+						hWndTray = FindWindowEx(hWndTray, IntPtr.Zero, "ToolbarWindow32", null);
+						return hWndTray;
+					}
+				}
+			}
+
+			return IntPtr.Zero;
+		}
+
+		public void getOpenWindows()
+      {
+          bool iconsFromAllDisplays = Convert.ToBoolean(AppSettings["iconsFromAllDisplays"]);
+          // Get running windows
+          new Thread(() =>
+          {
+              while (this.Visible)
+              {
+                  // Retreive window information
+                  Thread.CurrentThread.IsBackground = true;
+                  Process[] processlist = Process.GetProcesses();
+                  foreach (Process process in processlist)
+                  {
+                      // Check if process has valid window
+                      if ((!String.IsNullOrEmpty(process.MainWindowTitle) && !filteredWindows.Contains(process.MainWindowTitle)) && IsWindow(process.MainWindowHandle) && (GetWindowLong(process.MainWindowHandle, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) == 0)
+                      {
+                          // Check which screen/display it is on, show/hide depending on settings
+                          if (iconsFromAllDisplays || (Screen.FromHandle(process.MainWindowHandle).DeviceName == Screen.PrimaryScreen.DeviceName && !iconsFromAllDisplays))
+                          {
                                
-                                if (!openWindows.ContainsKey(process.MainModule.FileName))
-                                {
-                                    lock (openWindows)
-                                    {
-                                        openWindows.Add(process.MainModule.FileName, new Dictionary<IntPtr, GroupBox>());
-                                    }
-                                }
+                              if (!openWindows.ContainsKey(process.MainModule.FileName))
+                              {
+                                  lock (openWindows)
+                                  {
+                                      openWindows.Add(process.MainModule.FileName, new Dictionary<IntPtr, GroupBox>());
+                                  }
+                              }
                                
 
-                                // Add this window if it is not already being tracked
-                                if (!openWindows[process.MainModule.FileName].ContainsKey(process.MainWindowHandle))
-                                {
-                                    // prepare group
-                                    GroupBox grp = new GroupBox();
-                                    grp.Name = process.MainWindowHandle.ToString();
-                                    grp.AccessibleName = process.MainModule.FileName.ToString();
-                                    grp.Tag = process.MainWindowTitle;
-                                    grp.Height = this.Height;
-                                    grp.Width = this.Height;
-                                    grp.MouseDown += (sender, e) =>
-                                    {
+                              // Add this window if it is not already being tracked
+                              if (!openWindows[process.MainModule.FileName].ContainsKey(process.MainWindowHandle))
+                              {
+                                  // prepare group
+                                  GroupBox grp = new GroupBox();
+                                  grp.Name = process.MainWindowHandle.ToString();
+                                  grp.AccessibleName = process.MainModule.FileName.ToString();
+                                  grp.Tag = process.MainWindowTitle;
+                                  grp.Height = this.Height;
+                                  grp.Width = this.Height;
+                                  grp.MouseDown += (sender, e) =>
+                                  {
 
-                                    };
-                                    grp.MouseEnter += (sender, e) =>
-                                    {
-                                        hoverIcons.Add(grp.Name);
-                                    };
-                                    grp.MouseLeave += (sender, e) =>
-                                    {
-                                        hoverIcons.Remove(grp.Name);
-                                    };
-                                    grp.Click += (sender, e) =>
-                                    {
-                                        MouseEventArgs me = (MouseEventArgs)e;
-                                        lastHWnd = process.MainWindowHandle;
-                                        lastIcon = grp;
+                                  };
+                                  grp.MouseEnter += (sender, e) =>
+                                  {
+                                      hoverIcons.Add(grp.Name);
+                                  };
+                                  grp.MouseLeave += (sender, e) =>
+                                  {
+                                      hoverIcons.Remove(grp.Name);
+                                  };
+                                  grp.Click += (sender, e) =>
+                                  {
+                                      MouseEventArgs me = (MouseEventArgs)e;
+                                      lastHWnd = process.MainWindowHandle;
+                                      lastIcon = grp;
 
-                                        if (me.Button == MouseButtons.Left)
-                                        {
-                                            if (IsIconic(lastHWnd))
-                                            {
-                                                SetForegroundWindow(lastHWnd);
-                                                ToggleWindow((int)lastHWnd, RESTORE);
-                                            }
-                                            else
-                                            {
-                                                ToggleWindow((int)lastHWnd, MIN);
-                                            }
-                                        }
-                                        else if (me.Button == MouseButtons.Right)
-                                        {
-                                            cntxtIcon.Show(Cursor.Position);
-                                        }
-                                    };
-                                    new ToolTip().SetToolTip(grp, process.MainWindowTitle);
+                                      if (me.Button == MouseButtons.Left)
+                                      {
+                                          if (IsIconic(lastHWnd))
+                                          {
+                                              SetForegroundWindow(lastHWnd);
+                                              ToggleWindow((int)lastHWnd, RESTORE);
+                                          }
+                                          else
+                                          {
+                                              ToggleWindow((int)lastHWnd, MIN);
+                                          }
+                                      }
+                                      else if (me.Button == MouseButtons.Right)
+                                      {
+                                          cntxtIcon.Show(Cursor.Position);
+                                      }
+                                  };
+                                  new ToolTip().SetToolTip(grp, process.MainWindowTitle);
 
-                                    if (Convert.ToBoolean(AppSettings["iconLabels"]))
-                                    {
-                                        // Prepare label
-                                        Label lbl = new Label();
-                                        lbl.BackgroundImageLayout = ImageLayout.Stretch;
-                                        lbl.TextAlign = ContentAlignment.MiddleLeft;
-                                        lbl.Location = new Point(this.Height, 0);
-                                        lbl.Text = process.MainWindowTitle;
-                                        lbl.Name = "icoLabel";
-                                        lbl.Height = this.Height;
-                                        lbl.Enabled = false;
-                                        grp.Width += 100;
-                                        grp.Controls.Add(lbl);
-                                    }
+                                  if (Convert.ToBoolean(AppSettings["iconLabels"]))
+                                  {
+                                      // Prepare label
+                                      Label lbl = new Label();
+                                      lbl.BackgroundImageLayout = ImageLayout.Stretch;
+                                      lbl.TextAlign = ContentAlignment.MiddleLeft;
+                                      lbl.Location = new Point(this.Height, 0);
+                                      lbl.Text = process.MainWindowTitle;
+                                      lbl.Name = "icoLabel";
+                                      lbl.Height = this.Height;
+                                      lbl.Enabled = false;
+                                      grp.Width += 100;
+                                      grp.Controls.Add(lbl);
+                                  }
 
-                                    // Build Icon as PictureBox Control
-                                    PictureBox ico = new PictureBox();
-                                    ico.Image = Bitmap.FromHicon(Icon.ExtractAssociatedIcon(process.MainModule.FileName).Handle);
-                                    ico.BackgroundImageLayout = ImageLayout.Stretch;
-                                    ico.SizeMode = PictureBoxSizeMode.CenterImage;
-                                    ico.Height = this.Height;
-                                    ico.Width = this.Height;                                   
-                                    ico.Enabled = false;
-                                    grp.Controls.Add(ico);
+                                  // Build Icon as PictureBox Control
+                                  PictureBox ico = new PictureBox();
+                                  ico.Image = Bitmap.FromHicon(Icon.ExtractAssociatedIcon(process.MainModule.FileName).Handle);
+                                  ico.BackgroundImageLayout = ImageLayout.Stretch;
+                                  ico.SizeMode = PictureBoxSizeMode.CenterImage;
+                                  ico.Height = grp.Height;
+                                  ico.Width = grp.Height;                                   
+                                  ico.Enabled = false;
+                                  grp.Controls.Add(ico);
 
-                                    lock (openWindows)
-                                    {
-                                        // Add to tracked windows
-                                        openWindows[process.MainModule.FileName].Add(process.MainWindowHandle, grp);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }).Start();
+                                  lock (openWindows)
+                                  {
+                                      // Add to tracked windows
+                                      openWindows[process.MainModule.FileName].Add(process.MainWindowHandle, grp);
+                                  }
+                              }
+                          }
+                      }
+                  }
+              }
+          }).Start();
         }
 
         public void UpdateDockUI(object sender, EventArgs e)
         {
             // Suspend the dock layout
             taskbarPanel.SuspendLayout();
+						trayPanel.SuspendLayout();
 
             // Get Spacing Config
-            int padding = Convert.ToInt32(AppSettings["iconSpacing"]);
+            int iconPadding = Convert.ToInt32(AppSettings["iconSpacing"]);
+						int trayPadding = Convert.ToInt32(AppSettings["traySpacing"]);
 
             // Lock window list
             lock (openWindows)
@@ -322,7 +511,7 @@ namespace dock
                             {                              
 
                                 // Adjust padding where possible
-                                entry.Value.Margin = new Padding(padding, 0, padding, 0);
+                                entry.Value.Margin = new Padding(iconPadding, 0, iconPadding, 0);
                              
                                 // Add Icon to dock
                                 taskbarPanel.Controls.Add(entry.Value);
@@ -360,10 +549,35 @@ namespace dock
                 }
             }
 
+						lock (trayIcons)
+            {
+                // Check if each window is still valid
+                foreach (KeyValuePair<string, Dictionary<IntPtr, GroupBox>> trayIcon in trayIcons)
+                {   
+                    if (trayIcon.Value.Count > 0)
+                    { 
+                        foreach (KeyValuePair<IntPtr, GroupBox> entry in trayIcon.Value)
+                        {
+
+                            // If window is still valid and isnt already on the dock
+                            if (!trayPanel.Controls.ContainsKey(entry.Key.ToString()))
+                            {                              
+
+                                // Adjust padding where possible
+                                entry.Value.Margin = new Padding(trayPadding, this.Height/4, trayPadding, 0);
+                             
+                                // Add Icon to dock
+                                trayPanel.Controls.Add(entry.Value);                              
+                            }
+                        }
+                    }
+                }
+            }
+
             // Resize dock
             if (taskbarPanel.Controls.Count>1)
             {
-                taskbarPanel.Width = taskbarPanel.Controls.Count * taskbarPanel.Controls[0].Width + ((padding * 2) * taskbarPanel.Controls.Count);
+                taskbarPanel.Width = taskbarPanel.Controls.Count * taskbarPanel.Controls[0].Width + ((iconPadding * 2) * taskbarPanel.Controls.Count);
                 foreach(GroupBox grp in taskbarPanel.Controls)
                 {
                     // is window highlighted
@@ -393,7 +607,7 @@ namespace dock
                 }
                 // Check if active
                 
-            }
+            }				
 
             // If config is set to enable centering, calculate center
             if (Convert.ToBoolean(Convert.ToBoolean(AppSettings["dockCentered"])))
@@ -405,7 +619,7 @@ namespace dock
                 int sWidth = Screen.PrimaryScreen.Bounds.Width;
                 int dWidth = this.Width;
                 int diff = (sWidth - dWidth) / 2;
-                this.Location = new Point(diff, Screen.PrimaryScreen.Bounds.Height - this.Height);
+                this.Location = new Point(diff, this.Location.Y);
 
                 // Center icons to dock
                 center = (this.Width / 2) - taskbarPanel.Width/2;
@@ -414,6 +628,7 @@ namespace dock
 
             // Resume the dock layout            
             taskbarPanel.ResumeLayout();
+						trayPanel.ResumeLayout();
 
             // Allow for growth
             if (taskbarPanel.Width > (int)baseWidth)
@@ -526,6 +741,21 @@ namespace dock
             info.fMask = SEE_MASK_INVOKEIDLIST;
             return ShellExecuteEx(ref info);
         }
+
+				private static bool SetWorkspace(RECT rect)
+				{
+					 // Since you've declared the P/Invoke function correctly, you don't need to
+					 // do the marshaling yourself manually. The .NET FW will take care of it.
+
+					 bool result = SystemParametersInfo(SPI_SETWORKAREA, (int)IntPtr.Zero, ref rect, SPIF_change);
+					 if (!result)
+					 {
+							 // Find out the error code
+							 MessageBox.Show("The last error was: " + Marshal.GetLastWin32Error().ToString());
+					 }
+
+					 return result;
+				}
 
         protected override CreateParams CreateParams
         {
