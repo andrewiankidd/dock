@@ -266,88 +266,102 @@ namespace dock
       }
 
 		public unsafe void getTrayIcons()
-      {
-					IntPtr systemTrayHandle = GetSystemTrayHandle();					
-
-					using (LP_Process process = new LP_Process(systemTrayHandle))
+    {
+			if (AppSettings["showTrayIcons"].Equals("true", StringComparison.InvariantCultureIgnoreCase))
+			{
+				new Thread(() =>
+				{
+					while (this.Visible)
 					{
-						ToolBarButton tbb = new ToolBarButton();
-						IntPtr remoteButtonPtr = process.Allocate(tbb);
-						TrayData td = new TrayData();
-						process.Allocate(td);
-						uint count = (uint)SendMessage(systemTrayHandle, TB_BUTTONCOUNT, IntPtr.Zero, IntPtr.Zero);
+						// Retreive window information
+						Thread.CurrentThread.IsBackground = true;
+						IntPtr systemTrayHandle = GetSystemTrayHandle();
 
-						for (uint i = 0; i < count; i++)
+						using (LP_Process process = new LP_Process(systemTrayHandle))
 						{
-							uint SOK = (uint)SendMessage(systemTrayHandle, TB_GETBUTTON, new IntPtr(i), remoteButtonPtr);
-							if (SOK != 1) throw new ApplicationException("TB_GETBUTTON failed");
-							process.Read(tbb, remoteButtonPtr);
-							process.Read(td, tbb.dwData);
-							if(td.hWnd==IntPtr.Zero) throw new ApplicationException("Invalid window handle");
-							using(LP_Process proc=new LP_Process(td.hWnd)) {
-								string filename=proc.GetImageFileName();
-								if(filename!=null) {
-									filename=filename.ToLower();
-									if(filename.EndsWith(".exe")) {
-										if (!trayIcons.ContainsKey(filename))
+							ToolBarButton tbb = new ToolBarButton();
+							IntPtr remoteButtonPtr = process.Allocate(tbb);
+							TrayData td = new TrayData();
+							process.Allocate(td);
+							uint count = (uint)SendMessage(systemTrayHandle, TB_BUTTONCOUNT, IntPtr.Zero, IntPtr.Zero);
+
+							for (uint i = 0; i < count; i++)
+							{
+								uint SOK = (uint)SendMessage(systemTrayHandle, TB_GETBUTTON, new IntPtr(i), remoteButtonPtr);
+								if (SOK != 1) break;
+								process.Read(tbb, remoteButtonPtr);
+								process.Read(td, tbb.dwData);
+								if (td.hWnd == IntPtr.Zero) throw new ApplicationException("Invalid window handle");
+								using (LP_Process proc = new LP_Process(td.hWnd))
+								{
+									string filename = proc.GetImageFileName();
+									if (filename != null)
+									{
+										filename = filename.ToLower();
+										if (filename.EndsWith(".exe"))
 										{
-											lock (trayIcons)
+											if (!trayIcons.ContainsKey(filename))
 											{
-												trayIcons.Add(filename, new Dictionary<IntPtr, GroupBox>());
-											}
+												lock (trayIcons)
+												{
+													trayIcons.Add(filename, new Dictionary<IntPtr, GroupBox>());
+												}
 
-											// Add this window if it is not already being tracked
-                      if (!trayIcons[filename].ContainsKey(td.hWnd))
-                      {
-                          // prepare group
-                          GroupBox grp = new GroupBox();
+												// Add this window if it is not already being tracked
+												if (!trayIcons[filename].ContainsKey(td.hWnd))
+												{
+													// prepare group
+													GroupBox grp = new GroupBox();
 													grp.Name = filename;
-                          grp.AccessibleName = filename;
-                          grp.Tag = filename;
-                          grp.Height = this.Height/2;
-                          grp.Width = this.Height/2;
-                          grp.MouseDown += (sender, e) =>
-                          {
+													grp.AccessibleName = filename;
+													grp.Tag = filename;
+													grp.Height = this.Height / 2;
+													grp.Width = this.Height / 2;
+													grp.MouseDown += (sender, e) =>
+													{
 
-                          };
-                          grp.MouseEnter += (sender, e) =>
-                          {
-                              
-                          };
-                          grp.MouseLeave += (sender, e) =>
-                          {
-                              
-                          };
-                          grp.Click += (sender, e) =>
-                          {
-                              
-                          };
-                          //new ToolTip().SetToolTip(grp, process.MainWindowTitle);
+													};
+													grp.MouseEnter += (sender, e) =>
+													{
 
-                          // Build Icon as PictureBox Control
-                          PictureBox ico = new PictureBox();
-										
-                          ico.Image = Bitmap.FromHicon((td.hIcon));
-                          ico.BackgroundImageLayout = ImageLayout.Stretch;
-                          ico.SizeMode = PictureBoxSizeMode.CenterImage;
-                          ico.Height = grp.Height;
-                          ico.Width = grp.Width;                                   
-                          ico.Enabled = false;
-                          grp.Controls.Add(ico);
+													};
+													grp.MouseLeave += (sender, e) =>
+													{
 
-                          lock (trayIcons)
-                          {
-                              // Add to tracked windows
-                              trayIcons[filename].Add(td.hWnd, grp);
-                          }
-                      }
+													};
+													grp.Click += (sender, e) =>
+													{
 
+													};
+													//new ToolTip().SetToolTip(grp, process.MainWindowTitle);
+
+													// Build Icon as PictureBox Control
+													PictureBox ico = new PictureBox();
+
+													ico.Image = Bitmap.FromHicon((td.hIcon));
+													ico.BackgroundImageLayout = ImageLayout.Stretch;
+													ico.SizeMode = PictureBoxSizeMode.CenterImage;
+													ico.Height = grp.Height;
+													ico.Width = grp.Width;
+													ico.Enabled = false;
+													grp.Controls.Add(ico);
+
+													lock (trayIcons)
+													{
+														// Add to tracked windows
+														trayIcons[filename].Add(td.hWnd, grp);
+													}
+												}
+
+											}
 										}
 									}
 								}
 							}
 						}
 					}
+				}).Start();
+			}
 		}
 
 
