@@ -17,9 +17,9 @@ namespace dock
         // WinAPI Callbacks
         [DllImport("user32.dll")]
         private static extern int FindWindow(string className, string windowText);
-				[DllImport("user32.dll", SetLastError = true)]
-				static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpClassName, string lpWindowName);
-				[DllImport("user32.dll", EntryPoint = "ShowWindow")]
+		[DllImport("user32.dll", SetLastError = true)]
+		static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpClassName, string lpWindowName);
+		[DllImport("user32.dll", EntryPoint = "ShowWindow")]
         private static extern int ToggleWindow(int hwnd, int command);
         [DllImport("user32.dll")]
         static extern IntPtr GetForegroundWindow();
@@ -65,59 +65,84 @@ namespace dock
         public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
         [DllImport("User32.dll")]
         public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-				[ StructLayout( LayoutKind.Sequential ) ]
-				internal struct TBBUTTON 
-				{
-						public Int32 iBitmap;
-						public Int32 idCommand;
-						public byte fsState;
-						public byte fsStyle;
-						public byte bReserved1;
-						public byte bReserved2;
-						public UInt32 dwData;
-						public IntPtr iString;
-				};
-				[DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-				[return: MarshalAs(UnmanagedType.Bool)]
-				private static extern bool SystemParametersInfo(int uiAction, int uiParam, ref RECT pvParam, int fWinIni);
-				private const Int32 SPIF_SENDWININICHANGE = 2;
-				private const Int32 SPIF_UPDATEINIFILE = 1;
-				private const Int32 SPIF_change = SPIF_UPDATEINIFILE | SPIF_SENDWININICHANGE;
-				private const Int32 SPI_SETWORKAREA = 47;
-				private const Int32 SPI_GETWORKAREA = 48;
-				[StructLayout(LayoutKind.Sequential)]
-				public struct RECT
-				{
-					public Int32 Left;
-					public Int32 Top;
-					public Int32 Right;
-					public Int32 Bottom;
-				}
-				[StructLayout(LayoutKind.Sequential)]
-				public class ToolBarButton
-				{
-					public uint iBitmap;
-					public uint idCommand;
-					public byte fsState;
-					public byte fsStyle;
-					private byte bReserved0;
-					private byte bReserved1;
-					public IntPtr dwData; // points to tray data
-					public uint iString;
-				}
-				[StructLayout(LayoutKind.Sequential)]
-				public class TrayData
-				{
-					public IntPtr hWnd;
-					public uint uID;
-					public uint uCallbackMessage;
-					private uint reserved0;
-					private uint reserved1;
-					public IntPtr hIcon;
-				}
+		[ StructLayout( LayoutKind.Sequential ) ]
+		internal struct TBBUTTON 
+		{
+				public Int32 iBitmap;
+				public Int32 idCommand;
+				public byte fsState;
+				public byte fsStyle;
+				public byte bReserved1;
+				public byte bReserved2;
+				public UInt32 dwData;
+				public IntPtr iString;
+		};
+		[DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+		[return: MarshalAs(UnmanagedType.Bool)]
+		private static extern bool SystemParametersInfo(int uiAction, int uiParam, ref RECT pvParam, int fWinIni);
+		private const Int32 SPIF_SENDWININICHANGE = 2;
+		private const Int32 SPIF_UPDATEINIFILE = 1;
+		private const Int32 SPIF_change = SPIF_UPDATEINIFILE | SPIF_SENDWININICHANGE;
+		private const Int32 SPI_SETWORKAREA = 47;
+		private const Int32 SPI_GETWORKAREA = 48;
+		[StructLayout(LayoutKind.Sequential)]
+		public struct RECT
+		{
+			public Int32 Left;
+			public Int32 Top;
+			public Int32 Right;
+			public Int32 Bottom;
+		}
+		[StructLayout(LayoutKind.Sequential)]
+		public class ToolBarButton
+		{
+			public uint iBitmap;
+			public uint idCommand;
+			public byte fsState;
+			public byte fsStyle;
+			private byte bReserved0;
+			private byte bReserved1;
+			public IntPtr dwData; // points to tray data
+			public uint iString;
+		}
+		[StructLayout(LayoutKind.Sequential)]
+		public class TrayData
+		{
+			public IntPtr hWnd;
+			public uint uID;
+			public uint uCallbackMessage;
+			private uint reserved0;
+			private uint reserved1;
+			public IntPtr hIcon;
+		}
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool GetWindowPlacement(
+        IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
 
-				// WinAPI UI control constants
-				private const int HIDE = 0;
+        [Serializable]
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct WINDOWPLACEMENT
+        {
+            public int length;
+            public int flags;
+            public ShowWindowCommands showCmd;
+            public System.Drawing.Point ptMinPosition;
+            public System.Drawing.Point ptMaxPosition;
+            public System.Drawing.Rectangle rcNormalPosition;
+        }
+
+        internal enum ShowWindowCommands : int
+        {
+            Hide = 0,
+            Normal = 1,
+            Minimized = 2,
+            Maximized = 3,
+        }
+
+
+        // WinAPI UI control constants
+        private const int HIDE = 0;
         private const int SHOW = 1;
         private const int MAX = 3;
         private const int RESTORE = 4;
@@ -129,9 +154,9 @@ namespace dock
         private const int WS_EX_TOOLWINDOW = 0x0080;
         private const int WS_EX_NOACTIVATE = 0x08000000;
         private const int GWL_EXSTYLE = -0x14;
-				private const int WM_USER = 0x0400;
-				private const int TB_BUTTONCOUNT = (WM_USER + 24);
-				private const int TB_GETBUTTON = (WM_USER + 23);
+		private const int WM_USER = 0x0400;
+		private const int TB_BUTTONCOUNT = (WM_USER + 24);
+		private const int TB_GETBUTTON = (WM_USER + 23);
 		#endregion
 
 		#region globals
@@ -231,13 +256,13 @@ namespace dock
             // Hide windows taskbar
             toggleTaskbar(HIDE);
 
-						//
-						RECT rect = new RECT();
-						rect.Top = 50;
-						rect.Left = 0;
-						rect.Bottom = 1920;
-						rect.Right = 1080;
-						//SetWorkspace(rect);
+			//
+			RECT rect = new RECT();
+			rect.Top = 50;
+			rect.Left = 0;
+			rect.Bottom = 1920;
+			rect.Right = 1080;
+			//SetWorkspace(rect);
 
             // Start polling windows
             getOpenWindows();
@@ -386,7 +411,15 @@ namespace dock
 			return IntPtr.Zero;
 		}
 
-		public void getOpenWindows()
+        private static WINDOWPLACEMENT GetPlacement(IntPtr hwnd)
+        {
+            WINDOWPLACEMENT placement = new WINDOWPLACEMENT();
+            placement.length = Marshal.SizeOf(placement);
+            GetWindowPlacement(hwnd, ref placement);
+            return placement;
+        }
+
+        public void getOpenWindows()
       {
           bool iconsFromAllDisplays = Convert.ToBoolean(AppSettings["iconsFromAllDisplays"]);
           // Get running windows
@@ -400,7 +433,7 @@ namespace dock
                   foreach (Process process in processlist)
                   {
                       // Check if process has valid window
-                      if ((!String.IsNullOrEmpty(process.MainWindowTitle) && !filteredWindows.Contains(process.MainWindowTitle)) && IsWindow(process.MainWindowHandle) && (GetWindowLong(process.MainWindowHandle, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) == 0)
+                      if ((!String.IsNullOrEmpty(process.MainWindowTitle) && !filteredWindows.Contains(process.MainWindowTitle)) && Convert.ToInt32(GetPlacement(process.MainWindowHandle).showCmd) != 0 && IsWindow(process.MainWindowHandle) && (GetWindowLong(process.MainWindowHandle, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) == 0)
                       {
                           // Check which screen/display it is on, show/hide depending on settings
                           if (iconsFromAllDisplays || (Screen.FromHandle(process.MainWindowHandle).DeviceName == Screen.PrimaryScreen.DeviceName && !iconsFromAllDisplays))
@@ -504,11 +537,11 @@ namespace dock
         {
             // Suspend the dock layout
             taskbarPanel.SuspendLayout();
-						trayPanel.SuspendLayout();
+			trayPanel.SuspendLayout();
 
             // Get Spacing Config
             int iconPadding = Convert.ToInt32(AppSettings["iconSpacing"]);
-						int trayPadding = Convert.ToInt32(AppSettings["traySpacing"]);
+			int trayPadding = Convert.ToInt32(AppSettings["traySpacing"]);
 
             // Lock window list
             lock (openWindows)
@@ -564,7 +597,7 @@ namespace dock
                 }
             }
 
-						lock (trayIcons)
+			lock (trayIcons)
             {
                 // Check if each window is still valid
                 foreach (KeyValuePair<string, Dictionary<IntPtr, GroupBox>> trayIcon in trayIcons)
@@ -703,29 +736,63 @@ namespace dock
             }
         }
 
+        private void cntxtIconMinimize_Click(object sender, EventArgs e)
+        {
+            ToggleWindow((int)lastHWnd, MIN);
+        }
+
+        private void cntxtIconMaximize_Click(object sender, EventArgs e)
+        {
+            SetForegroundWindow(lastHWnd);
+            ToggleWindow((int)lastHWnd, MAX);
+        }
+
+        private void cntxtIconRestore_Click(object sender, EventArgs e)
+        {
+            SetForegroundWindow(lastHWnd);
+            ToggleWindow((int)lastHWnd, RESTORE);
+        }
+
         private void cntxtIcon_Opening(object sender, System.ComponentModel.CancelEventArgs e)
         {
             // Find the icon that was right-clicked
-            /*
-            GroupBox tmp = lastIcon;
-                  
-            if (!IsWindow((IntPtr)Convert.ToInt32(tmp.Name)))
+
+            this.cntxtIconClose.Visible = true;
+            int placement = Convert.ToInt32(GetPlacement(lastHWnd).showCmd);
+
+            if (pinnedWindows.ContainsKey(lastIcon.AccessibleName))
             {
-                // Hide unrelated context menu items
-                this.cntxtIconClose.Visible = false;
                 this.cntxtIconPin.Visible = false;
                 this.cntxtIconUnpin.Visible = true;
+                if (!IsWindow(lastHWnd))
+                {
+                    this.cntxtIconClose.Visible = false;
+                }
             }
             else
             {
-                // Hide unrelated context menu items
-                this.cntxtIconClose.Visible = true;
-                if (!pinnedWindows.ContainsKey(lastIcon.AccessibleName))
-                {
-                    this.cntxtIconPin.Visible = true;
-                }
+                this.cntxtIconPin.Visible = true;
                 this.cntxtIconUnpin.Visible = false;
-            }*/
+            }
+
+            if (placement.Equals(1)) //Normal
+            {
+                this.cntxtIconMaximize.Visible = true;
+                this.cntxtIconMinimize.Visible = true;
+                this.cntxtIconRestore.Visible = false;
+            }
+            else if (placement.Equals(2)) //Minimized 
+            {
+                this.cntxtIconMaximize.Visible = true;
+                this.cntxtIconMinimize.Visible = false;
+                this.cntxtIconRestore.Visible = true;
+            }
+            else if (placement.Equals(3)) //Maximized 
+            {
+                this.cntxtIconMaximize.Visible = false;
+                this.cntxtIconMinimize.Visible = true;
+                this.cntxtIconRestore.Visible = true;
+            }
         }
 
         private void cntxtDock_exit(object sender, EventArgs e)
@@ -757,20 +824,20 @@ namespace dock
             return ShellExecuteEx(ref info);
         }
 
-				private static bool SetWorkspace(RECT rect)
+		private static bool SetWorkspace(RECT rect)
+		{
+				// Since you've declared the P/Invoke function correctly, you don't need to
+				// do the marshaling yourself manually. The .NET FW will take care of it.
+
+				bool result = SystemParametersInfo(SPI_SETWORKAREA, (int)IntPtr.Zero, ref rect, SPIF_change);
+				if (!result)
 				{
-					 // Since you've declared the P/Invoke function correctly, you don't need to
-					 // do the marshaling yourself manually. The .NET FW will take care of it.
-
-					 bool result = SystemParametersInfo(SPI_SETWORKAREA, (int)IntPtr.Zero, ref rect, SPIF_change);
-					 if (!result)
-					 {
-							 // Find out the error code
-							 MessageBox.Show("The last error was: " + Marshal.GetLastWin32Error().ToString());
-					 }
-
-					 return result;
+						// Find out the error code
+						MessageBox.Show("The last error was: " + Marshal.GetLastWin32Error().ToString());
 				}
+
+				return result;
+		}
 
         protected override CreateParams CreateParams
         {
